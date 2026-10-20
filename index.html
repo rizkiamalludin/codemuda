@@ -188,8 +188,8 @@ function showQuestion(){
 }
 $('nextQuestion').addEventListener('click',()=>{if(!answered)return;if(qi<quiz.length-1){qi++;showQuestion();}else{$('quizProgress').textContent='Tes selesai';$('question').textContent='Nilai kamu: '+score+' dari '+quiz.length+' ('+Math.round(score/quiz.length*100)+'%).';$('answers').replaceChildren();$('feedback').textContent=score>=20?'Keren! Pemahaman dasarmu kuat.':score>=13?'Bagus, terus latihan dan baca lagi materi yang belum dikuasai.':'Tidak apa-apa, baca materi lalu coba lagi.';$('nextQuestion').disabled=true;$('nextQuestion').classList.add('hidden');}});
 $('restartQuiz').addEventListener('click',()=>{$('nextQuestion').classList.remove('hidden');renderQuiz();});
-function goTo(id){const target=$(id);if(!target)return;document.querySelectorAll('[data-target]').forEach(b=>b.classList.toggle('active',b.dataset.target===id));if(id!=='quiz'){}else renderQuiz();target.scrollIntoView({behavior:'smooth',block:'start'});}
-document.querySelectorAll('[data-target]').forEach(b=>b.addEventListener('click',()=>goTo(b.dataset.target)));
+function goTo(id){const target=document.getElementById(id);if(!target)return;document.querySelectorAll('.navlinks [data-target]').forEach(b=>b.classList.toggle('active',b.dataset.target===id));if(id==='quiz')renderQuiz();target.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'start'});}
+document.addEventListener('click',function(event){const button=event.target.closest('[data-target]');if(!button)return;event.preventDefault();goTo(button.dataset.target);});
 document.querySelectorAll('[data-nav]').forEach(a=>a.addEventListener('click',e=>{e.preventDefault();goTo('home');}));
 $('year').textContent=new Date().getFullYear();setExample();renderQuiz();
 </script></body></html>
