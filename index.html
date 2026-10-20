@@ -33,6 +33,27 @@ html.site-dark body a{color:#93c5fd}
 @media(max-width:520px){#site-tools{right:12px;bottom:12px}#site-tools button{width:42px;height:42px;border-radius:14px}}
 @media(prefers-reduced-motion:reduce){#site-tools button,#site-progress{transition:none!important}html{scroll-behavior:auto!important}}
 </style>
+<style id="codemuda-layout-hotfix">
+html,body{width:100%;max-width:100%;overflow-x:clip}
+body{min-width:0}
+.wrap{width:100%;min-width:0}
+main,.section,.hero,.cards,.card,.split,.playground{min-width:0;max-width:100%}
+.hero h1,.hero p{overflow-wrap:anywhere}
+.navlinks{min-width:0;max-width:100%}
+#site-tools button{background:var(--panel,#131b2e)!important;color:var(--text,#eef3ff)!important}
+@media(max-width:960px){
+ .nav{align-items:flex-start!important;flex-direction:column!important;padding-top:10px;padding-bottom:10px;gap:10px}
+ .navlinks{width:100%;display:flex;flex-wrap:wrap;gap:8px}
+ .navlinks button{font-size:clamp(.88rem,2.3vw,1rem);padding:9px 12px;max-width:100%}
+ .hero{padding-top:36px}
+}
+@media(max-width:520px){
+ .navlinks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+ .navlinks button{width:100%;min-width:0}
+ .navlinks button:last-child{grid-column:1/-1}
+ .hero h1{font-size:clamp(2rem,10vw,3rem)}
+}
+</style>
 </head>
 <body>
 <header class="top"><div class="wrap nav"><a class="brand" href="#home" data-nav aria-label="CodeMuda beranda"><img src="logo.svg" alt="CodeMuda" width="180" height="48" style="display:block;width:min(180px,42vw);height:auto"></a><nav class="navlinks" aria-label="Menu"><button data-target="home" class="active">Beranda</button><button data-target="materi">Materi</button><button data-target="playground">Uji Kode</button><button data-target="quiz">Tes 25 Soal</button><button data-target="kontak">Kontak</button></nav></div></header>
