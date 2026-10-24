@@ -142,22 +142,23 @@ for (int i = 1; i <= 3; i++) {
 <script>
 const $=id=>document.getElementById(id);
 const examples={
-python:'nama = "Dunia"
+python:`nama = "Dunia"
 angka = 7
 print("Halo", nama)
 print("Hasil:", angka * 6)
 
 for i in range(1, 4):
-    print("Nomor", i)',
-javascript:'const nama = "Dunia";
+    print("Nomor", i)`,
+javascript:`const nama = "Dunia";
 const angka = 7;
 console.log("Halo", nama);
 console.log("Hasil:", angka * 6);
 
 for (let i = 1; i <= 3; i++) {
   console.log("Nomor", i);
-}',
-cpp:'#include <iostream>
+}`,
+cpp:`#include <iostream>
+#include <string>
 using namespace std;
 int main() {
     string nama = "Dunia";
@@ -168,7 +169,7 @@ int main() {
         cout << "Nomor " << i << endl;
     }
     return 0;
-}'
+}`
 };
 function setExample(){ $('code').value=examples[$('language').value]; $('output').textContent='Hasil program akan muncul di sini.'; $('runStatus').textContent='Contoh kode siap dijalankan.';}
 $('language').addEventListener('change',setExample);$('resetCode').addEventListener('click',setExample);$('clearOutput').addEventListener('click',()=>{$('output').textContent='';$('runStatus').textContent='Output dibersihkan.'});
@@ -179,25 +180,18 @@ $('runCode').addEventListener('click',async()=>{
   if(lang==='javascript'){
    const logs=[];const format=v=>typeof v==='string'?v:JSON.stringify(v);
    const fakeConsole={log:(...a)=>logs.push(a.map(format).join(' ')),warn:(...a)=>logs.push('⚠ '+a.map(format).join(' ')),error:(...a)=>logs.push('Error: '+a.map(format).join(' ')),clear:()=>logs.splice(0)};
-   const run=new Function('console','"use strict";
-'+code+'
-//# sourceURL=codemuda-user.js');
-   run(fakeConsole);$('output').textContent=logs.join('
-')||'(Program selesai tanpa output.)';$('runStatus').textContent='JavaScript selesai dijalankan.';
+   const run=new Function('console','\"use strict\";\\n'+code+'\\n//# sourceURL=codemuda-user.js');
+   run(fakeConsole);$('output').textContent=logs.join('\\n')||'(Program selesai tanpa output.)';$('runStatus').textContent='JavaScript selesai dijalankan.';
   }else if(lang==='python'){
    if(!window.pyodideInstance){$('runStatus').textContent='Memuat mesin Python (pertama kali bisa sedikit lama)…';const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.js';document.head.appendChild(s);await new Promise((res,rej)=>{s.onload=res;s.onerror=()=>rej(Error('Mesin Python gagal dimuat. Periksa koneksi internet.'));});window.pyodideInstance=await loadPyodide();}
    const py=window.pyodideInstance;let logs=[];py.setStdout({batched:(x)=>logs.push(x)});py.setStderr({batched:(x)=>logs.push('Error: '+x)});
-   try{await py.runPythonAsync(code);$('output').textContent=logs.join('
-')||'(Program selesai tanpa output.)';$('runStatus').textContent='Python selesai dijalankan.';}finally{py.setStdout({batched:()=>{}});py.setStderr({batched:()=>{}});}
+   try{await py.runPythonAsync(code);$('output').textContent=logs.join('\\n')||'(Program selesai tanpa output.)';$('runStatus').textContent='Python selesai dijalankan.';}finally{py.setStdout({batched:()=>{}});py.setStderr({batched:()=>{}});}
   }else{
    $('runStatus').textContent='Mengirim kode C++ ke layanan kompilasi…';
    const response=await fetch('https://emkc.org/api/v2/piston/execute',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({language:'c++',version:'*',files:[{name:'main.cpp',content:code}]})});
-   if(!response.ok)throw Error('Layanan C++ tidak merespons (HTTP '+response.status+').');const data=await response.json();const r=data.run||{};let out=(r.stdout||'')+(r.stderr?'
-'+r.stderr:'');if(data.compile&&data.compile.stderr)out+='
-'+data.compile.stderr;$('output').textContent=out.trim()||'(Program selesai tanpa output.)';$('runStatus').textContent=(r.code===0?'C++ selesai dijalankan.':'Program berakhir dengan kode '+r.code+'.');
+   if(!response.ok)throw Error('Layanan C++ tidak merespons (HTTP '+response.status+').');const data=await response.json();const r=data.run||{};let out=(r.stdout||'')+(r.stderr?'\\n'+r.stderr:'');if(data.compile&&data.compile.stderr)out+='\\n'+data.compile.stderr;$('output').textContent=out.trim()||'(Program selesai tanpa output.)';$('runStatus').textContent=(r.code===0?'C++ selesai dijalankan.':'Program berakhir dengan kode '+r.code+'.');
   }
- }catch(e){$('output').textContent='Terjadi kesalahan:
-'+(e&&e.message?e.message:String(e));$('runStatus').textContent='Program gagal dijalankan.';}finally{btn.disabled=false;}
+ }catch(e){$('output').textContent='Terjadi kesalahan:\\n'+(e&&e.message?e.message:String(e));$('runStatus').textContent='Program gagal dijalankan.';}finally{btn.disabled=false;}
 });
 const questions=[
 {q:'Apa kegunaan utama Python?',a:['Bahasa pemrograman untuk berbagai kebutuhan seperti otomasi dan data','Hanya untuk desain gambar','Untuk mengganti sistem operasi saja','Bahasa khusus membuat kabel'],c:0,e:'Python digunakan dalam banyak bidang, termasuk otomasi, web, data, dan AI.'},
