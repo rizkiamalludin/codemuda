@@ -178,10 +178,45 @@ $('runCode').addEventListener('click',async()=>{
  $('output').textContent='Menjalankan kode...';$('runStatus').textContent='Sedang berjalan…';btn.disabled=true;
  try{
   if(lang==='javascript'){
-   const logs=[];const format=v=>typeof v==='string'?v:JSON.stringify(v);
-   const fakeConsole={log:(...a)=>logs.push(a.map(format).join(' ')),warn:(...a)=>logs.push('⚠ '+a.map(format).join(' ')),error:(...a)=>logs.push('Error: '+a.map(format).join(' ')),clear:()=>logs.splice(0)};
-   const run=new Function('console','\"use strict\";\\n'+code+'\\n//# sourceURL=codemuda-user.js');
-   run(fakeConsole);$('output').textContent=logs.join('\\n')||'(Program selesai tanpa output.)';$('runStatus').textContent='JavaScript selesai dijalankan.';
+   // Jalankan kode latihan di Web Worker agar tidak memiliki akses langsung ke DOM halaman.
+   const workerSource = `
+     self.onmessage = ({data}) => {
+       const logs = [];
+       const format = value => {
+         if (typeof value === 'string') return value;
+         try { return JSON.stringify(value); } catch (_) { return String(value); }
+       };
+       const safeConsole = {
+         log: (...args) => logs.push(args.map(format).join(' ')),
+         warn: (...args) => logs.push('⚠ ' + args.map(format).join(' ')),
+         error: (...args) => logs.push('Error: ' + args.map(format).join(' ')),
+         clear: () => logs.splice(0)
+       };
+       try {
+         const execute = new Function('console', '"use strict";\\n' + data.code);
+         execute(safeConsole);
+         self.postMessage({ok:true, output:logs.join('\\n') || '(Program selesai tanpa output.)'});
+       } catch (error) {
+         self.postMessage({ok:false, error:error && error.message ? error.message : String(error)});
+       }
+     };
+   `;
+   const workerUrl=URL.createObjectURL(new Blob([workerSource],{type:'text/javascript'}));
+   const worker=new Worker(workerUrl);
+   try {
+     const result=await new Promise((resolve,reject)=>{
+       const timeout=setTimeout(()=>{worker.terminate();reject(new Error('Waktu eksekusi habis (batas 2 detik).'));},2000);
+       worker.onmessage=event=>{clearTimeout(timeout);resolve(event.data);};
+       worker.onerror=event=>{clearTimeout(timeout);reject(new Error(event.message||'Worker gagal menjalankan kode.'));};
+       worker.postMessage({code});
+     });
+     if(!result.ok)throw new Error(result.error);
+     $('output').textContent=result.output;
+     $('runStatus').textContent='JavaScript selesai dijalankan di lingkungan terpisah.';
+   } finally {
+     worker.terminate();
+     URL.revokeObjectURL(workerUrl);
+   }
   }else if(lang==='python'){
    if(!window.pyodideInstance){$('runStatus').textContent='Memuat mesin Python (pertama kali bisa sedikit lama)…';const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.js';document.head.appendChild(s);await new Promise((res,rej)=>{s.onload=res;s.onerror=()=>rej(Error('Mesin Python gagal dimuat. Periksa koneksi internet.'));});window.pyodideInstance=await loadPyodide();}
    const py=window.pyodideInstance;let logs=[];py.setStdout({batched:(x)=>logs.push(x)});py.setStderr({batched:(x)=>logs.push('Error: '+x)});
