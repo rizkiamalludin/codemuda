@@ -278,7 +278,7 @@ $('runCode').addEventListener('click',async()=>{
    if(/\bimport\s*\(/.test(code))throw new Error('Dynamic import tidak diizinkan pada playground.');
    if(code.length>20000)throw new Error('Kode maksimal 20.000 karakter.');
    // Jalankan kode latihan di Web Worker agar tidak memiliki akses langsung ke DOM halaman.
-   const workerSource = \`
+   const workerSource = `
      const denyNetwork = () => { throw new Error('Akses jaringan dinonaktifkan pada playground.'); };
      self.fetch = denyNetwork;
      self.importScripts = denyNetwork;
@@ -316,7 +316,7 @@ $('runCode').addEventListener('click',async()=>{
          sendResult({ok:false, error:error && error.message ? error.message : String(error)});
        }
      };
-   \`;
+   `;
 const workerUrl=URL.createObjectURL(new Blob([workerSource],{type:'text/javascript'}));
    const worker=new Worker(workerUrl);
    try {
