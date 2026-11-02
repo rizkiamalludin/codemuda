@@ -188,18 +188,18 @@ let pyWorkerInstance = null;
 let pyWorkerObjectUrl = null;
 const pyWorkerSource = [
   "let pyodideRuntime = null;",
+  "let sendResult = self.postMessage.bind(self);",
   "self.onmessage = async function(event) {",
   "  try {",
   "    if (!pyodideRuntime) {",
   "      importScripts('https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.js');",
   "      pyodideRuntime = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.27.7/full/' });",
   "    }",
-  "    let sendResult = self.postMessage.bind(self);",
   "    sendResult({ ready: true });",
   "    const denyNetwork = function() { throw new Error('Akses jaringan dinonaktifkan pada playground.'); };",
   "    self.fetch = denyNetwork; self.importScripts = denyNetwork;",
   "    self.XMLHttpRequest = undefined; self.WebSocket = undefined; self.EventSource = undefined;",
-  "    self.Worker = undefined; self.SharedWorker = undefined; self.BroadcastChannel = undefined; self.WebTransport = undefined; self.indexedDB = undefined; self.caches = undefined;",
+  "    self.Worker = undefined; self.SharedWorker = undefined; self.BroadcastChannel = undefined; self.WebTransport = undefined; self.RTCPeerConnection = undefined; self.indexedDB = undefined; self.caches = undefined;",
   "    Object.defineProperty(self, 'postMessage', { value: denyNetwork, writable: false, configurable: false });",
   "    const logs = []; let outputSize = 0;",
   "    const append = function(value) { if (outputSize >= 20000) return; const chunk = String(value).slice(0, 20000 - outputSize); logs.push(chunk); outputSize += chunk.length; };",
@@ -213,10 +213,11 @@ const pyWorkerSource = [
   "      pyodideRuntime.setStderr({ batched: function() {} });",
   "    }",
   "  } catch (error) {",
-  "    if (typeof sendResult === 'function') sendResult({ ok: false, error: error && error.message ? error.message : String(error) });",
+  "    sendResult({ ok: false, error: error && error.message ? error.message : String(error) });",
   "  }",
   "};"
 ].join('\n');
+
 function resetPyWorker(worker) {
   if (worker) worker.terminate();
   if (pyWorkerInstance === worker) {
@@ -272,10 +273,11 @@ $('runCode').addEventListener('click',async()=>{
  $('output').textContent='Menjalankan kode...';$('runStatus').textContent='Sedang berjalan…';btn.disabled=true;
  try{
   if(lang==='javascript'){
+   if(/\bimport\s*\(/.test(code))throw new Error('Dynamic import tidak diizinkan pada playground.');
    if(code.length>20000)throw new Error('Kode maksimal 20.000 karakter.');
    if(/\\bimport\\s*\\(/.test(code))throw new Error('Dynamic import tidak diizinkan pada playground.');
    // Jalankan kode latihan di Web Worker agar tidak memiliki akses langsung ke DOM halaman.
-   const workerSource = `
+   const workerSource = \`
      const denyNetwork = () => { throw new Error('Akses jaringan dinonaktifkan pada playground.'); };
      self.fetch = denyNetwork;
      self.importScripts = denyNetwork;
@@ -284,6 +286,9 @@ $('runCode').addEventListener('click',async()=>{
      self.EventSource = undefined;
      self.Worker = undefined;
      self.SharedWorker = undefined;
+     self.BroadcastChannel = undefined;
+     self.WebTransport = undefined;
+     self.RTCPeerConnection = undefined;
      self.indexedDB = undefined;
      self.caches = undefined;
      self.onmessage = ({data}) => {
@@ -301,7 +306,6 @@ $('runCode').addEventListener('click',async()=>{
          error: (...args) => append('Error: ' + args.map(format).join(' ')),
          clear: () => { logs.splice(0); outputSize = 0; }
        };
-       const denyNetwork = () => { throw new Error('Akses jaringan dinonaktifkan pada playground.'); };
        Object.defineProperty(self, 'postMessage', { value: denyNetwork, writable: false, configurable: false });
        try {
          const execute = new Function('console', '"use strict";\\n' + data.code);
@@ -311,8 +315,8 @@ $('runCode').addEventListener('click',async()=>{
          sendResult({ok:false, error:error && error.message ? error.message : String(error)});
        }
      };
-   `;
-   const workerUrl=URL.createObjectURL(new Blob([workerSource],{type:'text/javascript'}));
+   \`;
+const workerUrl=URL.createObjectURL(new Blob([workerSource],{type:'text/javascript'}));
    const worker=new Worker(workerUrl);
    try {
      const result=await new Promise((resolve,reject)=>{
