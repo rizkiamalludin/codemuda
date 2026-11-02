@@ -204,7 +204,7 @@ const pyWorkerSource = [
   "    pyodideRuntime.setStderr({ batched: function(value) { logs.push('Error: ' + value); } });",
   "    try {",
   "      await pyodideRuntime.runPythonAsync(event.data.code);",
-  "      self.postMessage({ ok: true, output: logs.join('\\\\n') || '(Program selesai tanpa output.)' });",
+  "      self.postMessage({ ok: true, output: logs.join('\\n') || '(Program selesai tanpa output.)' });",
   "    } finally {",
   "      pyodideRuntime.setStdout({ batched: function() {} });",
   "      pyodideRuntime.setStderr({ batched: function() {} });",
