@@ -194,23 +194,26 @@ const pyWorkerSource = [
   "      importScripts('https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.js');",
   "      pyodideRuntime = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.27.7/full/' });",
   "    }",
-  "    self.postMessage({ ready: true });",
+  "    let sendResult = self.postMessage.bind(self);",
+  "    sendResult({ ready: true });",
   "    const denyNetwork = function() { throw new Error('Akses jaringan dinonaktifkan pada playground.'); };",
   "    self.fetch = denyNetwork; self.importScripts = denyNetwork;",
   "    self.XMLHttpRequest = undefined; self.WebSocket = undefined; self.EventSource = undefined;",
-  "    self.Worker = undefined; self.SharedWorker = undefined; self.indexedDB = undefined; self.caches = undefined;",
-  "    const logs = [];",
-  "    pyodideRuntime.setStdout({ batched: function(value) { logs.push(value); } });",
-  "    pyodideRuntime.setStderr({ batched: function(value) { logs.push('Error: ' + value); } });",
+  "    self.Worker = undefined; self.SharedWorker = undefined; self.BroadcastChannel = undefined; self.WebTransport = undefined; self.indexedDB = undefined; self.caches = undefined;",
+  "    Object.defineProperty(self, 'postMessage', { value: denyNetwork, writable: false, configurable: false });",
+  "    const logs = []; let outputSize = 0;",
+  "    const append = function(value) { if (outputSize >= 20000) return; const chunk = String(value).slice(0, 20000 - outputSize); logs.push(chunk); outputSize += chunk.length; };",
+  "    pyodideRuntime.setStdout({ batched: function(value) { append(value); } });",
+  "    pyodideRuntime.setStderr({ batched: function(value) { append('Error: ' + value); } });",
   "    try {",
   "      await pyodideRuntime.runPythonAsync(event.data.code);",
-  "      self.postMessage({ ok: true, output: logs.join('\\n') || '(Program selesai tanpa output.)' });",
+  "      sendResult({ ok: true, output: logs.join('\\n') || '(Program selesai tanpa output.)' });",
   "    } finally {",
   "      pyodideRuntime.setStdout({ batched: function() {} });",
   "      pyodideRuntime.setStderr({ batched: function() {} });",
   "    }",
   "  } catch (error) {",
-  "    self.postMessage({ ok: false, error: error && error.message ? error.message : String(error) });",
+  "    if (typeof sendResult === 'function') sendResult({ ok: false, error: error && error.message ? error.message : String(error) });",
   "  }",
   "};"
 ].join('\n');
@@ -269,6 +272,8 @@ $('runCode').addEventListener('click',async()=>{
  $('output').textContent='Menjalankan kode...';$('runStatus').textContent='Sedang berjalan…';btn.disabled=true;
  try{
   if(lang==='javascript'){
+   if(code.length>20000)throw new Error('Kode maksimal 20.000 karakter.');
+   if(/\\bimport\\s*\\(/.test(code))throw new Error('Dynamic import tidak diizinkan pada playground.');
    // Jalankan kode latihan di Web Worker agar tidak memiliki akses langsung ke DOM halaman.
    const workerSource = `
      const denyNetwork = () => { throw new Error('Akses jaringan dinonaktifkan pada playground.'); };
@@ -282,23 +287,28 @@ $('runCode').addEventListener('click',async()=>{
      self.indexedDB = undefined;
      self.caches = undefined;
      self.onmessage = ({data}) => {
+       const sendResult = self.postMessage.bind(self);
        const logs = [];
+       let outputSize = 0;
+       const append = line => { if (outputSize >= 20000) return; const chunk = String(line).slice(0, 20000 - outputSize); logs.push(chunk); outputSize += chunk.length; };
        const format = value => {
-         if (typeof value === 'string') return value;
-         try { return JSON.stringify(value); } catch (_) { return String(value); }
+         if (typeof value === 'string') return value.slice(0, 2000);
+         try { return JSON.stringify(value).slice(0, 2000); } catch (_) { return String(value).slice(0, 2000); }
        };
        const safeConsole = {
-         log: (...args) => logs.push(args.map(format).join(' ')),
-         warn: (...args) => logs.push('⚠ ' + args.map(format).join(' ')),
-         error: (...args) => logs.push('Error: ' + args.map(format).join(' ')),
-         clear: () => logs.splice(0)
+         log: (...args) => append(args.map(format).join(' ')),
+         warn: (...args) => append('⚠ ' + args.map(format).join(' ')),
+         error: (...args) => append('Error: ' + args.map(format).join(' ')),
+         clear: () => { logs.splice(0); outputSize = 0; }
        };
+       const denyNetwork = () => { throw new Error('Akses jaringan dinonaktifkan pada playground.'); };
+       Object.defineProperty(self, 'postMessage', { value: denyNetwork, writable: false, configurable: false });
        try {
          const execute = new Function('console', '"use strict";\\n' + data.code);
          execute(safeConsole);
-         self.postMessage({ok:true, output:logs.join('\\n') || '(Program selesai tanpa output.)'});
+         sendResult({ok:true, output:logs.join('\\n') || '(Program selesai tanpa output.)'});
        } catch (error) {
-         self.postMessage({ok:false, error:error && error.message ? error.message : String(error)});
+         sendResult({ok:false, error:error && error.message ? error.message : String(error)});
        }
      };
    `;
@@ -319,6 +329,7 @@ $('runCode').addEventListener('click',async()=>{
      URL.revokeObjectURL(workerUrl);
    }
   }else if(lang==='python'){
+   if(code.length>20000)throw new Error('Kode maksimal 20.000 karakter.');
    $('runStatus').textContent='Menyiapkan mesin Python terisolasi…';
    const pythonOutput=await executePython(code);
    $('output').textContent=pythonOutput;
