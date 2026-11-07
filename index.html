@@ -175,58 +175,130 @@ function setExample(){ $('code').value=examples[$('language').value]; $('output'
 $('language').addEventListener('change',setExample);$('resetCode').addEventListener('click',setExample);$('clearOutput').addEventListener('click',()=>{$('output').textContent='';$('runStatus').textContent='Output dibersihkan.'});
 $('runCode').addEventListener('click',async()=>{
  const lang=$('language').value, code=$('code').value, btn=$('runCode');
- $('output').textContent='Menjalankan kode...';$('runStatus').textContent='Sedang berjalan…';btn.disabled=true;
+ $('output').textContent='Menjalankan kode...';
+ $('runStatus').textContent='Sedang berjalan…';
+ btn.disabled=true;
  try{
-  if(lang==='javascript'){
-   // Jalankan kode latihan di Web Worker agar tidak memiliki akses langsung ke DOM halaman.
-   const workerSource = `
-     self.onmessage = ({data}) => {
-       const logs = [];
-       const format = value => {
-         if (typeof value === 'string') return value;
-         try { return JSON.stringify(value); } catch (_) { return String(value); }
+  if(lang==='javascript'||lang==='python'){
+   // Kode latihan berjalan di Web Worker terpisah, bukan pada halaman utama.
+   // Worker tidak mempunyai akses ke DOM atau localStorage halaman.
+   const workerSource = lang==='javascript' ? `
+     const blockNetwork=()=>{throw new Error('Akses jaringan dinonaktifkan di playground.');};
+     self.fetch=blockNetwork;
+     self.XMLHttpRequest=class{constructor(){blockNetwork();}};
+     self.WebSocket=class{constructor(){blockNetwork();}};
+     self.importScripts=blockNetwork;
+     self.onmessage=({data})=>{
+       const logs=[];
+       const format=value=>{if(typeof value==='string')return value;try{return JSON.stringify(value)}catch(_){return String(value)}};
+       const safeConsole={
+         log:(...args)=>logs.push(args.map(format).join(' ')),
+         warn:(...args)=>logs.push('⚠ '+args.map(format).join(' ')),
+         error:(...args)=>logs.push('Error: '+args.map(format).join(' ')),
+         clear:()=>logs.splice(0)
        };
-       const safeConsole = {
-         log: (...args) => logs.push(args.map(format).join(' ')),
-         warn: (...args) => logs.push('⚠ ' + args.map(format).join(' ')),
-         error: (...args) => logs.push('Error: ' + args.map(format).join(' ')),
-         clear: () => logs.splice(0)
-       };
-       try {
-         const execute = new Function('console', '"use strict";\\n' + data.code);
+       try{
+         const execute=new Function('console','"use strict";\\n'+data.code);
          execute(safeConsole);
-         self.postMessage({ok:true, output:logs.join('\\n') || '(Program selesai tanpa output.)'});
-       } catch (error) {
-         self.postMessage({ok:false, error:error && error.message ? error.message : String(error)});
+         self.postMessage({ok:true,output:logs.join('\\n')||'(Program selesai tanpa output.)'});
+       }catch(error){
+         self.postMessage({ok:false,error:error&&error.message?error.message:String(error)});
+       }
+     };
+   ` : `
+     let pyodide=null;
+     self.onmessage=async({data})=>{
+       try{
+         if(!pyodide){
+           self.postMessage({type:'loading'});
+           importScripts('https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.js');
+           pyodide=await loadPyodide();
+           self.postMessage({type:'ready'});
+         }
+         const blockNetwork=()=>{throw new Error('Akses jaringan dinonaktifkan di playground.');};
+         self.fetch=blockNetwork;
+         self.XMLHttpRequest=class{constructor(){blockNetwork();}};
+         const logs=[];
+         pyodide.setStdout({batched:value=>logs.push(value)});
+         pyodide.setStderr({batched:value=>logs.push('Error: '+value)});
+         await pyodide.runPythonAsync(data.code);
+         self.postMessage({type:'result',ok:true,output:logs.join('\\n')||'(Program selesai tanpa output.)'});
+       }catch(error){
+         self.postMessage({type:'result',ok:false,error:error&&error.message?error.message:String(error)});
        }
      };
    `;
    const workerUrl=URL.createObjectURL(new Blob([workerSource],{type:'text/javascript'}));
    const worker=new Worker(workerUrl);
-   try {
+   try{
      const result=await new Promise((resolve,reject)=>{
-       const timeout=setTimeout(()=>{worker.terminate();reject(new Error('Waktu eksekusi habis (batas 2 detik).'));},2000);
-       worker.onmessage=event=>{clearTimeout(timeout);resolve(event.data);};
-       worker.onerror=event=>{clearTimeout(timeout);reject(new Error(event.message||'Worker gagal menjalankan kode.'));};
+       let timeout=setTimeout(()=>{
+         worker.terminate();
+         reject(new Error(lang==='python'?'Mesin Python terlalu lama dimuat (batas 45 detik).':'Waktu eksekusi habis (batas 5 detik).'));
+       },lang==='python'?45000:5000);
+       worker.onmessage=event=>{
+         const message=event.data||{};
+         if(lang==='python'&&message.type==='loading'){
+           $('runStatus').textContent='Memuat mesin Python di lingkungan terpisah…';
+           return;
+         }
+         if(lang==='python'&&message.type==='ready'){
+           clearTimeout(timeout);
+           timeout=setTimeout(()=>{
+             worker.terminate();
+             reject(new Error('Waktu eksekusi Python habis (batas 8 detik).'));
+           },8000);
+           $('runStatus').textContent='Menjalankan Python…';
+           return;
+         }
+         if(lang==='javascript' || message.type==='result'){
+           clearTimeout(timeout);
+           resolve(message);
+         }
+       };
+       worker.onerror=event=>{
+         clearTimeout(timeout);
+         reject(new Error(event.message||'Worker gagal menjalankan kode.'));
+       };
        worker.postMessage({code});
      });
      if(!result.ok)throw new Error(result.error);
      $('output').textContent=result.output;
-     $('runStatus').textContent='JavaScript selesai dijalankan di lingkungan terpisah.';
-   } finally {
+     $('runStatus').textContent=(lang==='python'?'Python':'JavaScript')+' selesai dijalankan di lingkungan terpisah.';
+   }finally{
      worker.terminate();
      URL.revokeObjectURL(workerUrl);
    }
-  }else if(lang==='python'){
-   if(!window.pyodideInstance){$('runStatus').textContent='Memuat mesin Python (pertama kali bisa sedikit lama)…';const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.js';document.head.appendChild(s);await new Promise((res,rej)=>{s.onload=res;s.onerror=()=>rej(Error('Mesin Python gagal dimuat. Periksa koneksi internet.'));});window.pyodideInstance=await loadPyodide();}
-   const py=window.pyodideInstance;let logs=[];py.setStdout({batched:(x)=>logs.push(x)});py.setStderr({batched:(x)=>logs.push('Error: '+x)});
-   try{await py.runPythonAsync(code);$('output').textContent=logs.join('\\n')||'(Program selesai tanpa output.)';$('runStatus').textContent='Python selesai dijalankan.';}finally{py.setStdout({batched:()=>{}});py.setStderr({batched:()=>{}});}
   }else{
    $('runStatus').textContent='Mengirim kode C++ ke layanan kompilasi…';
-   const response=await fetch('https://emkc.org/api/v2/piston/execute',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({language:'c++',version:'*',files:[{name:'main.cpp',content:code}]})});
-   if(!response.ok)throw Error('Layanan C++ tidak merespons (HTTP '+response.status+').');const data=await response.json();const r=data.run||{};let out=(r.stdout||'')+(r.stderr?'\\n'+r.stderr:'');if(data.compile&&data.compile.stderr)out+='\\n'+data.compile.stderr;$('output').textContent=out.trim()||'(Program selesai tanpa output.)';$('runStatus').textContent=(r.code===0?'C++ selesai dijalankan.':'Program berakhir dengan kode '+r.code+'.');
+   const controller=new AbortController();
+   const timeout=setTimeout(()=>controller.abort(),15000);
+   let response;
+   try{
+     response=await fetch('https://emkc.org/api/v2/piston/execute',{
+       method:'POST',
+       headers:{'Content-Type':'application/json'},
+       body:JSON.stringify({language:'c++',version:'*',files:[{name:'main.cpp',content:code}]}),
+       signal:controller.signal
+     });
+   }catch(error){
+     if(error.name==='AbortError')throw new Error('Layanan C++ terlalu lama merespons (batas 15 detik).');
+     throw error;
+   }finally{clearTimeout(timeout);}
+   if(!response.ok)throw Error('Layanan C++ tidak merespons (HTTP '+response.status+').');
+   const data=await response.json();
+   const run=data.run||{};
+   let output=(run.stdout||'')+(run.stderr?'\\n'+run.stderr:'');
+   if(data.compile&&data.compile.stderr)output+='\\n'+data.compile.stderr;
+   $('output').textContent=output.trim()||'(Program selesai tanpa output.)';
+   $('runStatus').textContent=(run.code===0?'C++ selesai dijalankan.':'Program berakhir dengan kode '+run.code+'.');
   }
- }catch(e){$('output').textContent='Terjadi kesalahan:\\n'+(e&&e.message?e.message:String(e));$('runStatus').textContent='Program gagal dijalankan.';}finally{btn.disabled=false;}
+ }catch(error){
+   $('output').textContent='Terjadi kesalahan:\\n'+(error&&error.message?error.message:String(error));
+   $('runStatus').textContent='Program gagal dijalankan.';
+ }finally{
+   btn.disabled=false;
+ }
 });
 const questions=[
 {q:'Apa kegunaan utama Python?',a:['Bahasa pemrograman untuk berbagai kebutuhan seperti otomasi dan data','Hanya untuk desain gambar','Untuk mengganti sistem operasi saja','Bahasa khusus membuat kabel'],c:0,e:'Python digunakan dalam banyak bidang, termasuk otomasi, web, data, dan AI.'},
