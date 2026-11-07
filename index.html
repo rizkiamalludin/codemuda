@@ -206,13 +206,13 @@ $('runCode').addEventListener('click',async()=>{
        }
      };
    ` : `
+     import { loadPyodide } from 'https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.mjs';
      let pyodide=null;
      self.onmessage=async({data})=>{
        try{
          if(!pyodide){
            self.postMessage({type:'loading'});
-           importScripts('https://cdn.jsdelivr.net/pyodide/v0.27.7/full/pyodide.js');
-           pyodide=await loadPyodide();
+           pyodide=await loadPyodide({indexURL:'https://cdn.jsdelivr.net/pyodide/v0.27.7/full/'});
            self.postMessage({type:'ready'});
          }
          const blockNetwork=()=>{throw new Error('Akses jaringan dinonaktifkan di playground.');};
@@ -229,7 +229,7 @@ $('runCode').addEventListener('click',async()=>{
      };
    `;
    const workerUrl=URL.createObjectURL(new Blob([workerSource],{type:'text/javascript'}));
-   const worker=new Worker(workerUrl);
+   const worker=new Worker(workerUrl,{type:lang==='python'?'module':'classic'});
    try{
      const result=await new Promise((resolve,reject)=>{
        let timeout=setTimeout(()=>{
